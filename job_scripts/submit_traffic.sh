@@ -11,7 +11,7 @@
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
 #SBATCH --profile=all
-#SBATCH --array=1-12
+#SBATCH --array=0-15
 
 PROJECT=$SCRATCH/df-analyze
 
