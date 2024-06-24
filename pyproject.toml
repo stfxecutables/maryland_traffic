@@ -1,0 +1,31 @@
+[tool.ruff]
+line-length = 90
+indent-width = 4
+target-version = "py310"
+ignore = ["E402"]
+respect-gitignore = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "test"]
+section-order = [
+  "future",
+  "standard-library",
+  "third-party",
+  "local-folder",
+  "first-party",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+filterwarnings = [
+  "ignore:PytestCollectionWarning",
+  'ignore:DeprecationWarning',
+  'ignore:Lazy Modules:UserWarning',
+  'ignore:ConvergenceWarning',
+  # note the use of single quote below to denote "raw" strings in TOML
+  # 'ignore:function ham\(\) is deprecated:DeprecationWarning',
+]
