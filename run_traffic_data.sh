@@ -75,7 +75,7 @@ mkdir -p "$RESULTS"
 df_analyze() {
     mkdir -p "$1"
     apptainer run --home $(readlink -f .) --app python "$ROOT/df_analyze.sif" \
-        "$ROOT/df-analyze.py" \
+        "$ROOT/df-analyze/df-analyze.py" \
         --df "$SHEET" \
         --mode classify \
         --target "$2" \
