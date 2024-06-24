@@ -2,11 +2,12 @@
 if ! command -v module &> /dev/null
 then
     echo "\`module\` command not found. Not on HPC SLURM cluster. Exiting"
-    exit 1
+    # exit 1
+else
+    export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
+    module load apptainer
 fi
 
-export APPTAINERENV_MPLCONFIGDIR="$(readlink -f .)"/.mplconfig
-module load apptainer
 
 PROJECT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$PROJECT" || exit 1
@@ -35,6 +36,24 @@ DROPS12=chrg_sect_mtch,chrg_title,outcome,search_conducted,search_disposition,se
 DROPS13=chrg_sect_mtch,chrg_title,outcome,race,search_conducted,search_disposition,search_type,stop_chrg_title,violation_type
 DROPS14=chrg_sect_mtch,chrg_title,outcome,search_conducted,search_disposition,search_type,sex,stop_chrg_title,violation_type
 DROPS15=chrg_sect_mtch,chrg_title,outcome,race,search_conducted,search_disposition,search_type,sex,stop_chrg_title,violation_type
+DROPS=(
+    "$DROPS00"
+    "$DROPS01"
+    "$DROPS02"
+    "$DROPS03"
+    "$DROPS04"
+    "$DROPS05"
+    "$DROPS06"
+    "$DROPS07"
+    "$DROPS08"
+    "$DROPS09"
+    "$DROPS10"
+    "$DROPS11"
+    "$DROPS12"
+    "$DROPS13"
+    "$DROPS14"
+    "$DROPS15"
+)
 
 OUT00="$RESULTS/outcome__race+sex"
 OUT01="$RESULTS/outcome__nosex"
@@ -53,6 +72,25 @@ OUT13="$RESULTS/chrg_title_mtch__nosex"
 OUT14="$RESULTS/chrg_title_mtch__norace"
 OUT15="$RESULTS/chrg_title_mtch__norace+nosex"
 
+OUTS=(
+    "$OUT00"
+    "$OUT01"
+    "$OUT02"
+    "$OUT03"
+    "$OUT04"
+    "$OUT05"
+    "$OUT06"
+    "$OUT07"
+    "$OUT08"
+    "$OUT09"
+    "$OUT10"
+    "$OUT11"
+    "$OUT12"
+    "$OUT13"
+    "$OUT14"
+    "$OUT15"
+)
+
 TARGET00=outcome
 TARGET01=outcome
 TARGET02=outcome
@@ -70,7 +108,25 @@ TARGET13=chrg_title_mtch
 TARGET14=chrg_title_mtch
 TARGET15=chrg_title_mtch
 
-mkdir -p "$RESULTS"
+TARGETS=(
+    "$TARGET00"
+    "$TARGET01"
+    "$TARGET02"
+    "$TARGET03"
+    "$TARGET04"
+    "$TARGET05"
+    "$TARGET06"
+    "$TARGET07"
+    "$TARGET08"
+    "$TARGET09"
+    "$TARGET10"
+    "$TARGET11"
+    "$TARGET12"
+    "$TARGET13"
+    "$TARGET14"
+    "$TARGET15"
+)
+
 
 df_analyze() {
     mkdir -p "$1"
@@ -79,6 +135,7 @@ df_analyze() {
         --df "$SHEET" \
         --mode classify \
         --target "$2" \
+        --categoricals "$CATS" \
         --ordinals $ORDS \
         --drops "$3" \
         --classifiers lgbm rf lr dummy \
@@ -100,8 +157,13 @@ df_analyze() {
         --htune-cls-metric f1 \
         --test-val-size 0.25 \
         --outdir "$1" 2>&1 | tee "$4"
-
 }
 
 
-df_analyze "$OUT00" "$TARGET00" "$DROPS00" "$OUT00"_outputs.txt
+IDX="$SLURM_ARRAY_TASK_ID"
+OUT=${OUTS[IDX]}
+TARG=${TARGETS[IDX]}
+DROPS=${DROPS[IDX]}
+TERM="$OUT"_outputs.txt
+
+df_analyze "$OUT" "$TARG" "$DROPS" "$TERM"
