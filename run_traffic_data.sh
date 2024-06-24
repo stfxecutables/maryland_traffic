@@ -91,7 +91,7 @@ df_analyze() {
         --filter-method assoc pred \
         --filter-assoc-cont-classify mut_info \
         --filter-assoc-cat-classify mut_info \
-        --filter-pred-classify f1 \
+        --filter-pred-classify acc \
         --n-feat-filter 20 \
         --n-feat-wrapper 10 \
         --redundant-wrapper-selection \
