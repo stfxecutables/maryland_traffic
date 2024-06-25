@@ -166,4 +166,4 @@ TARG=${TARGETS[IDX]}
 DROPS=${DROPS[IDX]}
 TERM="$OUT"_outputs.txt
 
-echo df_analyze "$OUT" "$TARG" "$DROPS" "$TERM"
+df_analyze "$OUT" "$TARG" "$DROPS" "$TERM"
