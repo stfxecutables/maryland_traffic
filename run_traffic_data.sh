@@ -155,7 +155,7 @@ df_analyze() {
         --redundant-threshold 0.01 \
         --htune-trials 100 \
         --htune-cls-metric f1 \
-        --test-val-size 0.8 \
+        --test-val-size 0.5 \
         --outdir "$1" 2>&1 | tee "$4"
 }
 

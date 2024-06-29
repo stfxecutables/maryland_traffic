@@ -13,7 +13,7 @@
 #SBATCH --profile=all
 #SBATCH --array=0-15
 
-PROJECT=$SCRATCH/df-analyze
+PROJECT=$SCRATCH/maryland_traffic
 
 cd "$PROJECT" || exit 1
 bash run_traffic_data.sh
