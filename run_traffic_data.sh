@@ -12,7 +12,7 @@ fi
 PROJECT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$PROJECT" || exit 1
 ROOT="$(readlink -f .)"
-RESULTS="$ROOT/traffic_results"
+RESULTS="$ROOT/traffic_results_no_stepup"
 TERM_OUT="$RESULTS/terminal_outputs.txt"
 DATA="$ROOT"/traffic_data
 SHEET="$DATA/traffic_data_processed.parquet"
@@ -141,7 +141,7 @@ df_analyze() {
         --classifiers lgbm rf lr dummy \
         --norm robust \
         --nan median \
-        --feat-select filter embed wrap \
+        --feat-select filter embed \
         --embed-select lgbm linear \
         --wrapper-select step-up \
         --wrapper-model linear \
