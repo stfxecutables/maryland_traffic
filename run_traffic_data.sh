@@ -138,10 +138,10 @@ df_analyze() {
         --categoricals "$CATS" \
         --ordinals $ORDS \
         --drops "$3" \
-        --classifiers lgbm rf lr dummy \
+        --classifiers lgbm sgd dummy \
         --norm robust \
         --nan median \
-        --feat-select filter embed \
+        --feat-select embed \
         --embed-select lgbm linear \
         --wrapper-select step-up \
         --wrapper-model linear \
