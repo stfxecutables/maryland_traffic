@@ -138,14 +138,14 @@ df_analyze() {
         --categoricals "$CATS" \
         --ordinals $ORDS \
         --drops "$3" \
-        --classifiers lgbm sgd dummy \
+        --classifiers lgbm dummy \
         --norm robust \
         --nan median \
         --feat-select embed \
-        --embed-select lgbm linear \
-        --wrapper-select step-up \
+        --embed-select lgbm \
+        --wrapper-select none \
         --wrapper-model linear \
-        --filter-method assoc pred \
+        --filter-method assoc \
         --filter-assoc-cont-classify mut_info \
         --filter-assoc-cat-classify mut_info \
         --filter-pred-classify acc \

@@ -17,3 +17,5 @@ PROJECT=$SCRATCH/maryland_traffic
 
 cd "$PROJECT" || exit 1
 bash run_traffic_data.sh
+
+# --array=0-15
