@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
 from df_analyze.analysis.metrics import cramer_v
 from geopy.distance import geodesic
 from joblib import Memory, Parallel, delayed
@@ -1682,7 +1683,13 @@ if __name__ == "__main__":
 
     # sys.exit()
 
+    # # Fix broken / meaningless SERO category in violation_type
     df = pd.read_parquet(FINAL_OUT)
+    if "SERO" in df["violation_type"].unique().tolist():
+        df = df[~df["violation_type"].isin(["SERO"])]
+        df.to_parquet(FINAL_OUT)
+    raise
+
     dfr = df.filter(regex=r"(chrg)|(viol)|(search)|(outcome)|(article)")
     dfr = dfr.loc[
         :,
