@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=def-jlevman
-#SBATCH --time=10:00:00
+#SBATCH --time=24:00:00
 #SBATCH --job-name=traffic_small
 #SBATCH --output=traffic_small__%j_%a.out
 #SBATCH --nodes=1

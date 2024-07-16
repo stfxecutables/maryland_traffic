@@ -36,7 +36,7 @@ DROPS12=chrg_sect_mtch,chrg_title,outcome,search_conducted,search_disposition,se
 DROPS13=chrg_sect_mtch,chrg_title,outcome,race,search_conducted,search_disposition,search_type,stop_chrg_title,violation_type
 DROPS14=chrg_sect_mtch,chrg_title,outcome,search_conducted,search_disposition,search_type,sex,stop_chrg_title,violation_type
 DROPS15=chrg_sect_mtch,chrg_title,outcome,race,search_conducted,search_disposition,search_type,sex,stop_chrg_title,violation_type
-DROPS=(
+ALL_DROPS=(
     "$DROPS00"
     "$DROPS01"
     "$DROPS02"
@@ -164,7 +164,7 @@ df_analyze() {
 IDX="$SLURM_ARRAY_TASK_ID"
 OUT=${OUTS[IDX]}
 TARG=${TARGETS[IDX]}
-DROPS=${DROPS[IDX]}
+DROPS=${ALL_DROPS[IDX]}
 TERM="$OUT"_outputs.txt
 
 df_analyze "$OUT" "$TARG" "$DROPS" "$TERM"
