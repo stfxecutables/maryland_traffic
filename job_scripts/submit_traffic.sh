@@ -11,7 +11,7 @@
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
 #SBATCH --profile=all
-#SBATCH --array=0-15
+#SBATCH --array=4,5,6,7
 
 PROJECT=$SCRATCH/maryland_traffic
 

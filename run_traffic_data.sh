@@ -141,6 +141,7 @@ df_analyze() {
         --classifiers lgbm dummy \
         --norm robust \
         --nan median \
+        --no-preds \
         --feat-select embed \
         --embed-select lgbm \
         --wrapper-select none \
