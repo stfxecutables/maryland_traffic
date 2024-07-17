@@ -10,6 +10,7 @@ sys.path.append(str(ROOT))  # isort: skip
 
 import json
 import os
+from pandas import Index
 import re
 import sys
 from scipy.stats import linregress
@@ -44,7 +45,8 @@ from skimage.filters import threshold_li, threshold_otsu
 from tqdm import tqdm
 from typing_extensions import Literal
 
-DATA = ROOT / "traffic_results"
+# DATA = ROOT / "traffic_results"
+DATA = ROOT / "cc_results/traffic_results_subset"
 
 
 def get_score_info(df: DataFrame, selected: Series) -> DataFrame:
@@ -204,10 +206,10 @@ def info_from_path(path: Path) -> DataFrame:
     df_lgbm = load_embed_metrics(path, "lgbm")
     # df_linear = load_embed_metrics(path, "linear")
     # df_wrap = load_wrap_metrics(path, model="linear")
-    # df_assoc = load_assoc_metrics(path)
+    df_assoc = load_assoc_metrics(path)
     # df_pred = load_pred_metrics(path)
-    # df_feats = pd.concat([df_linear, df_lgbm, df_wrap, df_assoc, df_pred], axis=0)
-    df_feats = df_lgbm
+    df_feats = pd.concat([df_lgbm, df_assoc], axis=0)
+    # df_feats = df_lgbm
 
     target_info = path.parents[3].stem
     target, feats = target_info.split("__")
@@ -229,8 +231,16 @@ def load_summary_df() -> DataFrame:
     )
 
     df = pd.concat(dfs, axis=0, ignore_index=True)
-    df = df[~df.model.isin(["dummy"])].copy()
+    target = df["target"].copy()
+    df.drop(columns="target", inplace=True)
+    df.insert(1, "target", target)
+    # df = df[~df.model.isin(["dummy"])].copy()
     print(df.to_markdown(tablefmt="simple", index=False))
+    # df.index = Index(name="rid", data=df["info"])
+    index_cols = ["info", "model", "selection"]
+    df.index = pd.MultiIndex.from_frame(df[index_cols], names=index_cols)
+
+    df.drop(columns=["path", "info"], inplace=True)
     return df
 
 
@@ -239,20 +249,27 @@ def print_bias_corrs(df: DataFrame, method: Literal["spearman", "pearson"]) -> N
     print(
         f"{method.capitalize()} correlations between performance metrics and inclusion of sensitive features."
     )
-    corrs = (
-        df.corr(method=method, numeric_only=True)
-        .loc[bias_cols]
-        .T.round(3)
-        .drop(index=bias_cols)
-    ).round(3)
-    covs = (
-        dfo.cov(numeric_only=True)[["incl_sex", "incl_race"]]
-        .iloc[2:]
-        .map(lambda x: f"{x:1.2e}")
-    )
+    df = df.copy().drop(columns="bal-acc", errors="ignore")
+    corrs = df.groupby("target").corr(method=method, numeric_only=True)[bias_cols]
+    covs = df.groupby("target").cov(numeric_only=True)[bias_cols]
+    targets = df["target"].unique().tolist()
+    # metrics = ["acc", "auroc", "f1", "npv", "ppv", "sens", "spec"]
+    metrics = ["acc", "auroc", "f1"]
+    sel = pd.MultiIndex.from_product([targets, metrics])
+    # corrs = (
+    #     df.corr(method=method, numeric_only=True)
+    #     .loc[bias_cols]
+    #     .T.round(3)
+    #     .drop(index=bias_cols)
+    # ).round(3)
+    # covs = (
+    #     dfo.cov(numeric_only=True)[["incl_sex", "incl_race"]]
+    #     .iloc[2:]
+    #     .map(lambda x: f"{x:1.2e}")
+    # )
 
-    info = pd.concat([corrs, covs], axis=1, keys=["corr", "cov"])
-    print(info)
+    info = pd.concat([corrs, covs], axis=1, keys=["corr", "cov"]).loc[sel]
+    print(info.round(5))
 
     # print(corrs.to_markdown(tablefmt="simple"))
     # print(covs.to_markdown(tablefmt="simple", floatfmt="1.2e"))
@@ -261,23 +278,31 @@ def print_bias_corrs(df: DataFrame, method: Literal["spearman", "pearson"]) -> N
 if __name__ == "__main__":
     pd.options.display.max_colwidth = 20
     df = load_summary_df()
-    df = df[df["target"] == "outcome"]
-    df.insert(3, "incl_sex", df["feats"].isin(["race+sex", "norace"]).astype(int))
-    df.insert(4, "incl_race", df["feats"].isin(["race+sex", "nosex"]).astype(int))
+    # df = df[df["target"] == "outcome"]
+    df.insert(4, "incl_sex", df["feats"].isin(["race+sex", "norace"]).astype(int))
+    df.insert(5, "incl_race", df["feats"].isin(["race+sex", "nosex"]).astype(int))
 
     print(df)
-    dff = df[df["selection"] == "embed_lgbm"].drop(columns=["target", "path", "info"])
-    df_sel = (
-        dff.reset_index(drop=True)
-        .drop(columns=["model", "selection", "embed_selector"])
-        .T.copy()
-    )
-    df_sel.columns = df_sel.loc["feats"]
-    df_sel = df_sel.drop(index="feats")
+    dummy = df[df["model"] == "dummy"]
+    dummy.index = dummy.index.droplevel("model")
+    lgbm = df[df["model"] == "lgbm"]
+    lgbm.index = lgbm.index.droplevel("model")
 
-    dfo = df.iloc[:, :14].drop(columns=["model"])
+    ix_start = df.columns.tolist().index("acc")
+    ix_stop = df.columns.tolist().index("spec") + 1
+    metrics = df.columns.tolist()[ix_start:ix_stop]
+    if not (lgbm[metrics] > dummy[metrics]).all().all():
+        raise ValueError("Must filter on models worse than dummy.")
+
+    # dff = df[df["selection"] == "embed_lgbm"].drop(columns=["path", "info"])
+    dff = df.drop(columns=["path", "info"], errors="ignore")
+    # df_sel = dff.reset_index(drop=True).drop(columns=["model", "embed_selector"]).T.copy()
+    # df_sel.columns = df_sel.loc["feats"]
+    # df_sel = df_sel.drop(index="feats")
+
+    dfo = df.iloc[:, :15].reset_index(drop=True)
     print(
-        dfo.sort_values(by=["selection", "acc"], ascending=False)
+        dfo.sort_values(by=["target", "acc"], ascending=False)
         .round(3)
         .to_markdown(tablefmt="simple", index=False)
     )
@@ -286,17 +311,25 @@ if __name__ == "__main__":
 
     print("\nRaw Correlations, including poor feature selection methods")
     print("=" * 81)
-    print_bias_corrs(dfo, "spearman")
+    print_bias_corrs(dfo[dfo["model"] != "dummy"], "spearman")
     # print_bias_corrs(dfo, "pearson")
 
-    dfo = dfo[dfo["selection"].isin(["none", "assoc"])]
-    print("\nCorrelations including only best feature selection methods")
-    print("=" * 81)
-    print_bias_corrs(dfo, "spearman")
-    # print_bias_corrs(dfo, "pearson")
+    for N in [4, 5]:
+        # see comment in https://stackoverflow.com/a/78582800 for the dumb
+        # [dfo.columns] subsetting below. Only way to include groups and not
+        # get the warning...
+        df_best = (
+            dfo[dfo["model"] != "dummy"]
+            .groupby(["target", "model"])[dfo.columns]
+            .apply(lambda grp: grp.nlargest(N, "acc"), include_groups=True)
+            .reset_index(drop=True)
+        )
+        print(f"\nCorrelations including only best {N} models")
+        print("=" * 81)
+        print_bias_corrs(df_best, "spearman")
+        # print_bias_corrs(dfo, "pearson")
 
-    dfo = dfo[dfo["selection"].isin(["none"])]
-    print("\nCorrelations when using no feature selection")
-    print("=" * 81)
-    print_bias_corrs(dfo, "spearman")
-    # print_bias_corrs(dfo, "pearson")
+    # dfo = dfo[dfo["selection"].isin(["none"])]
+    # print("\nCorrelations when using no feature selection")
+    # print("=" * 81)
+    # print_bias_corrs(dfo, "spearman")
