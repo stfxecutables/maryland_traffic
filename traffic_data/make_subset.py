@@ -64,6 +64,6 @@ if __name__ == "__main__":
     ss = StratifiedShuffleSplit(n_splits=1, train_size=n_third, random_state=SEED)
     ix = next(ss.split(X=df, y=df[STRATIFY]))[0]
     dfs = df.iloc[ix]
-    df.to_parquet(OUT)
+    dfs.to_parquet(OUT)
     print(dfs)
     print(f"Saved reduced subset to {OUT}")
