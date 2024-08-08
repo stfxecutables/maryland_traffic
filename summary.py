@@ -8,50 +8,27 @@ sys.path.append(str(ROOT))  # isort: skip
 # fmt: on
 
 
-import json
-import os
 from pandas import Index
-import re
 from scipy.stats import linregress
 import sys
-from scipy.stats import linregress
-from argparse import ArgumentParser, Namespace
-from dataclasses import dataclass
-from enum import Enum
-from io import StringIO
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
-    cast,
-    no_type_check,
-)
+from typing import cast, Literal
 
-import matplotlib.pyplot as plt
 import numpy as np
-import numpy.core.multiarray
 import pandas as pd
 from joblib import Parallel, delayed
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from numpy import ndarray
 from pandas import DataFrame, Series
-from skimage.filters import threshold_li, threshold_otsu
 from tqdm import tqdm
-from typing_extensions import Literal
 
 # DATA = ROOT / "traffic_results"
-DATA = ROOT / "cc_results/traffic_results_subset"
+DATA = ROOT / "results/traffic_results_subset"
 
 
 def get_score_info(df: DataFrame, selected: Series) -> DataFrame:
-    """
+    """Cluster features semantically for summarizing feature selection process
+
+    Notes
+    -----
     `df` will look something like:
 
                          feat  score
@@ -68,36 +45,43 @@ def get_score_info(df: DataFrame, selected: Series) -> DataFrame:
              vehicle_type_nan    0.0
 
     [144 rows x 2 columns]
-
-    We want to identify if the sex or race features (if present) have high
-    importances.
     """
+
     # get max and median importances for feature groups of interest
+    def get_matching(regex: str) -> list[str]:
+        return df["feat"][df["feat"].str.match(regex)].values.tolist()
+
+    # feature_clusters = {
+    #     "locs": df["feat"][
+    #         df["feat"].str.match(".*lat.*|.*long.*|.*outstate.*|.*reg_km.*")
+    #     ].values.tolist(),
+    #     "vhcls": df["feat"][df["feat"].str.match(".*vehicle.*")].values.tolist(),
+    #     "race": df["feat"][df["feat"].str.match(".*race.*")].values.tolist(),
+    #     "sex": df["feat"][df["feat"].str.match(".*sex.*")].values.tolist(),
+    #     "time": df["feat"][
+    #         df["feat"].str.match(".*hour.*|.*year.*|.*month.*|.*week.*")
+    #     ].values.tolist(),
+    #     "patrol": df["feat"][df["feat"].str.match(".*entity.*")].values.tolist(),
+    #     "agency": df["feat"][df["feat"].str.match(".*agency.*")].values.tolist(),
+    # }
     feature_clusters = {
-        "locs": df["feat"][
-            df["feat"].str.match(".*lat.*|.*long.*|.*outstate.*|.*reg_km.*")
-        ].values.tolist(),
-        "vhcls": df["feat"][df["feat"].str.match(".*vehicle.*")].values.tolist(),
-        "race": df["feat"][df["feat"].str.match(".*race.*")].values.tolist(),
-        "sex": df["feat"][df["feat"].str.match(".*sex.*")].values.tolist(),
-        "time": df["feat"][
-            df["feat"].str.match(".*hour.*|.*year.*|.*month.*|.*week.*")
-        ].values.tolist(),
-        "patrol": df["feat"][df["feat"].str.match(".*entity.*")].values.tolist(),
-        "agency": df["feat"][df["feat"].str.match(".*agency.*")].values.tolist(),
+        "locs": get_matching(".*lat.*|.*long.*|.*outstate.*|.*reg_km.*"),
+        "vhcls": get_matching(".*vehicle.*"),
+        "race": get_matching(".*race.*"),
+        "sex": get_matching(".*sex.*"),
+        "time": get_matching(".*hour.*|.*year.*|.*month.*|.*week.*"),
+        "patrol": get_matching(".*entity.*"),
+        "agency": get_matching(".*agency.*"),
     }
     infos = []
     for cluster, features in feature_clusters.items():
         dff = df[df["feat"].isin(features)].sort_values(by="score", ascending=False)
         if len(dff) == 0:
-            fname = ""
-            fmax = np.nan
-            fmed = np.nan
+            fname, fmax, fmed = "", np.nan, np.nan
         else:
             fname = dff["feat"].iloc[0]
             fmax = dff["score"].iloc[0]
             fmed = dff["score"].median()
-
         infos.append(
             DataFrame(
                 {
@@ -113,6 +97,11 @@ def get_score_info(df: DataFrame, selected: Series) -> DataFrame:
 
 
 def read_report_tables(file: Path) -> tuple[Series, DataFrame]:
+    """We are supposed to be able to just read the .json, but Python's lack
+    of proper serialization / poor jsonpickle documentation means this isn't
+    working as it should across clusters / machines / updates. So we parse our
+    Markdown tables...
+    """
     report = file.read_text()
     selected = None
     lines = report.split("\n")
@@ -126,7 +115,7 @@ def read_report_tables(file: Path) -> tuple[Series, DataFrame]:
     start = 0
     stop = None
     for i, line in enumerate(lines):
-        if line.startswith("| "):
+        if line.startswith("| "):  # EXTREMELY BRITTLE
             start = i + 2
             i = start
             # for wrapper reports, don't read until end
@@ -204,13 +193,18 @@ def info_from_path(path: Path) -> DataFrame:
     ).T.reset_index()
     df.rename_axis(None, axis="columns", inplace=True)
 
-    df_lgbm = load_embed_metrics(path, "lgbm")
-    # df_linear = load_embed_metrics(path, "linear")
-    # df_wrap = load_wrap_metrics(path, model="linear")
-    df_assoc = load_assoc_metrics(path)
-    # df_pred = load_pred_metrics(path)
-    df_feats = pd.concat([df_lgbm, df_assoc], axis=0)
-    # df_feats = df_lgbm
+    feature_info = []
+    feature_info.append(load_embed_metrics(path, "lgbm"))
+    feature_info.append(load_assoc_metrics(path))
+
+    # These underperformn always and were not used in the current run of data,
+    # i.e. `traffic_results_subset`, so we just comment them out for now
+
+    # feature_info.append(load_embed_metrics(path, "linear"))
+    # feature_info.append(load_wrap_metrics(path, model="linear"))
+    # feature_info.append(load_pred_metrics(path))
+
+    df_feats = pd.concat(feature_info, axis=0)
 
     target_info = path.parents[3].stem
     target, feats = target_info.split("__")
@@ -224,6 +218,7 @@ def info_from_path(path: Path) -> DataFrame:
 
 
 def load_summary_df() -> DataFrame:
+    """Grab info from all output directories, table-ize, and make into Tidy fmt"""
     paths = sorted(DATA.rglob("final_performances.csv"))
     dfs = []
     dfs = Parallel(n_jobs=-1)(
@@ -242,16 +237,23 @@ def load_summary_df() -> DataFrame:
     df.index = pd.MultiIndex.from_frame(df[index_cols], names=index_cols)
 
     df.drop(columns=["path", "info"], inplace=True)
+
+    # add some general indictors for looking at correlations with "biased" models
+    # obviously this is not the right way to do this, but it will give us ian idea
+    df.insert(4, "incl_sex", df["feats"].isin(["race+sex", "norace"]).astype(int))
+    df.insert(5, "incl_race", df["feats"].isin(["race+sex", "nosex"]).astype(int))
     return df
 
 
 def nan_slope(x: Series, y: Series) -> float:
+    """Compute slope, but return NaN if one of x or y is constant"""
     if len(x.unique()) == 1 or len(y.unique()) == 1:
         return np.nan
     return linregress(x, y)[0]
 
 
 def mean_diffs(x: Series, y: Series) -> float:
+    """Helper function"""
     idx_present = x == 1
     return y[idx_present].mean() - y[~idx_present].mean()
 
@@ -274,7 +276,7 @@ def print_bias_corrs(df: DataFrame, method: Literal["spearman", "pearson"]) -> N
         targ_slopes = []
         targ_diffs = []
         for indicator in bias_cols:
-            ms = cast(
+            ms = cast(  # m = slope, e.g. y = mx + b
                 DataFrame,
                 (
                     dfs[metrics]  # type: ignore
@@ -334,14 +336,12 @@ def print_bias_corrs(df: DataFrame, method: Literal["spearman", "pearson"]) -> N
     # print(covs.to_markdown(tablefmt="simple", floatfmt="1.2e"))
 
 
-if __name__ == "__main__":
+def main() -> None:
     pd.options.display.max_colwidth = 20
     df = load_summary_df()
-    # df = df[df["target"] == "outcome"]
-    df.insert(4, "incl_sex", df["feats"].isin(["race+sex", "norace"]).astype(int))
-    df.insert(5, "incl_race", df["feats"].isin(["race+sex", "nosex"]).astype(int))
-
     print(df)
+    # df = df[df["target"] == "outcome"]
+
     dummy = df[df["model"] == "dummy"]
     dummy.index = dummy.index.droplevel("model")
     lgbm = df[df["model"] == "lgbm"]
@@ -352,12 +352,6 @@ if __name__ == "__main__":
     metrics = df.columns.tolist()[ix_start:ix_stop]
     if not (lgbm[metrics] > dummy[metrics]).all().all():
         raise ValueError("Must filter on models worse than dummy.")
-
-    # dff = df[df["selection"] == "embed_lgbm"].drop(columns=["path", "info"])
-    dff = df.drop(columns=["path", "info"], errors="ignore")
-    # df_sel = dff.reset_index(drop=True).drop(columns=["model", "embed_selector"]).T.copy()
-    # df_sel.columns = df_sel.loc["feats"]
-    # df_sel = df_sel.drop(index="feats")
 
     dfo = df.iloc[:, :15].reset_index(drop=True)
     print("\nAll results")
@@ -394,8 +388,6 @@ if __name__ == "__main__":
     print("=" * 81)
     print(df_dummy)
 
-    bias_cols = ["bias", "incl_sex", "incl_race"]
-
     print("\nEffect of Sensitive Features on Performance: All Results")
     print("=" * 81)
     print_bias_corrs(dfo[dfo["model"] != "dummy"], "spearman")
@@ -416,7 +408,11 @@ if __name__ == "__main__":
         print_bias_corrs(df_best, "spearman")
         # print_bias_corrs(dfo, "pearson")
 
-    # dfo = dfo[dfo["selection"].isin(["none"])]
-    # print("\nCorrelations when using no feature selection")
-    # print("=" * 81)
-    # print_bias_corrs(dfo, "spearman")
+    dfo = dfo[dfo["selection"].isin(["none"])]
+    print("\nCorrelations when using no feature selection")
+    print("=" * 81)
+    print_bias_corrs(dfo, "spearman")
+
+
+if __name__ == "__main__":
+    main()
