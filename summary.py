@@ -12,6 +12,7 @@ import json
 import os
 from pandas import Index
 import re
+from scipy.stats import linregress
 import sys
 from scipy.stats import linregress
 from argparse import ArgumentParser, Namespace
@@ -244,17 +245,73 @@ def load_summary_df() -> DataFrame:
     return df
 
 
+def nan_slope(x: Series, y: Series) -> float:
+    if len(x.unique()) == 1 or len(y.unique()) == 1:
+        return np.nan
+    return linregress(x, y)[0]
+
+
+def mean_diffs(x: Series, y: Series) -> float:
+    idx_present = x == 1
+    return y[idx_present].mean() - y[~idx_present].mean()
+
+
 def print_bias_corrs(df: DataFrame, method: Literal["spearman", "pearson"]) -> None:
     bias_cols = ["incl_sex", "incl_race"]
+    all_metrics = ["acc", "auroc", "f1", "npv", "ppv", "sens", "spec"]
+    metrics = ["acc", "auroc", "f1"]
     print(
         f"{method.capitalize()} correlations between performance metrics and inclusion of sensitive features."
     )
     df = df.copy().drop(columns="bal-acc", errors="ignore")
     corrs = df.groupby("target").corr(method=method, numeric_only=True)[bias_cols]
-    covs = df.groupby("target").cov(numeric_only=True)[bias_cols]
+
+    slopes = []
+    diffs = []
+    targs = []
+
+    for targ, dfs in df.groupby("target"):
+        targ_slopes = []
+        targ_diffs = []
+        for indicator in bias_cols:
+            ms = cast(
+                DataFrame,
+                (
+                    dfs[metrics]  # type: ignore
+                    .apply(lambda s: nan_slope(dfs[indicator], s))
+                    .to_frame()
+                ),
+            )
+            ms.columns = Index(name="bias", data=[indicator])
+            targ_slopes.append(ms)
+
+            ds = cast(
+                DataFrame,
+                (
+                    dfs[metrics]  # type: ignore
+                    .apply(lambda s: mean_diffs(dfs[indicator], s))
+                    .to_frame()
+                ),
+            )
+            ds.columns = Index(name="bias", data=[indicator])
+            targ_diffs.append(ds)
+
+        # add targets to indexes
+        targ_slopes = pd.concat(targ_slopes, axis=1)
+        targ_slopes = pd.concat({targ: targ_slopes}, names=["target"])
+        targ_diffs = pd.concat(targ_diffs, axis=1)
+        targ_diffs = pd.concat({targ: targ_diffs}, names=["target"])
+
+        slopes.append(targ_slopes)
+        diffs.append(targ_diffs)
+        targs.append(targ)
+    slopes = pd.concat(slopes, axis=0)
+    diffs = pd.concat(diffs, axis=0)
+    # of course slopes and diffs are identical in this formulation since the
+    # indicators are binary...
+
     targets = df["target"].unique().tolist()
     # metrics = ["acc", "auroc", "f1", "npv", "ppv", "sens", "spec"]
-    metrics = ["acc", "auroc", "f1"]
     sel = pd.MultiIndex.from_product([targets, metrics])
     # corrs = (
     #     df.corr(method=method, numeric_only=True)
@@ -268,7 +325,9 @@ def print_bias_corrs(df: DataFrame, method: Literal["spearman", "pearson"]) -> N
     #     .map(lambda x: f"{x:1.2e}")
     # )
 
-    info = pd.concat([corrs, covs], axis=1, keys=["corr", "cov"]).loc[sel]
+    info = pd.concat(
+        [corrs, diffs, slopes], axis=1, keys=["corr", "𝜇_diff", "slope"]
+    ).loc[sel]
     print(info.round(5))
 
     # print(corrs.to_markdown(tablefmt="simple"))
@@ -301,15 +360,43 @@ if __name__ == "__main__":
     # df_sel = df_sel.drop(index="feats")
 
     dfo = df.iloc[:, :15].reset_index(drop=True)
+    print("\nAll results")
+    print("=" * 81)
     print(
         dfo.sort_values(by=["target", "acc"], ascending=False)
         .round(3)
         .to_markdown(tablefmt="simple", index=False)
     )
 
+    df_best = (
+        dfo[dfo["model"] != "dummy"]
+        .groupby(["target", "model"])[dfo.columns]
+        .apply(lambda grp: grp.nlargest(4, "acc"), include_groups=True)
+        .reset_index(drop=True)
+        .drop(columns=["embed_selector", "feats", "bal-acc"])
+        .round(3)
+    )
+    print(
+        "\nBest 4 results (i.e. best selection methods) for each combination of model and target"
+    )
+    print("=" * 81)
+    print(df_best)
+
+    df_dummy = (
+        dfo[dfo["model"] == "dummy"]
+        .groupby(["target"])[dfo.columns]
+        .apply(lambda grp: grp.nlargest(1, "acc"), include_groups=True)
+        .reset_index(drop=True)
+        .drop(columns=["embed_selector", "feats", "bal-acc"])
+        .round(3)
+    )
+    print("\nDummy performances:")
+    print("=" * 81)
+    print(df_dummy)
+
     bias_cols = ["bias", "incl_sex", "incl_race"]
 
-    print("\nRaw Correlations, including poor feature selection methods")
+    print("\nEffect of Sensitive Features on Performance: All Results")
     print("=" * 81)
     print_bias_corrs(dfo[dfo["model"] != "dummy"], "spearman")
     # print_bias_corrs(dfo, "pearson")
@@ -324,7 +411,7 @@ if __name__ == "__main__":
             .apply(lambda grp: grp.nlargest(N, "acc"), include_groups=True)
             .reset_index(drop=True)
         )
-        print(f"\nCorrelations including only best {N} models")
+        print(f"\nEffect of Sensitive Features on Performance: Best {N} Runs")
         print("=" * 81)
         print_bias_corrs(df_best, "spearman")
         # print_bias_corrs(dfo, "pearson")
